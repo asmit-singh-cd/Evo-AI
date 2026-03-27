@@ -15,10 +15,17 @@ API_KEY = "YOUR_API"
 # 🔊 SPEAK
 def speak(text):
     os.system(f'espeak-ng -s 140 -p 20 -v en-us "{text}" 2>/dev/null')
+
     if "output_label" in globals():
         output_label.config(text="Evo: " + text)
         root.update()
 
+    # 🗣️ Mouth animation
+    if "avatar_canvas" in globals():
+        for i in range(4):
+            avatar_canvas.itemconfig(mouth, extent=100 if i % 2 == 0 else 140)
+            root.update()
+            root.after(120)
 # 🎤 LISTEN
 def listen():
     r = sr.Recognizer()
@@ -62,7 +69,7 @@ def ask_ai(question):
         })
 
         headers = {
-            'x-rapidapi-key': "YOUR_KEY",
+            'x-rapidapi-key': "27eccd1036msh576d4fbb4844a7dp1e3253jsn9e625b267b35",
             'x-rapidapi-host': "chatgpt-42.p.rapidapi.com",
             'Content-Type': "application/json"
         }
@@ -208,6 +215,22 @@ root.configure(bg="#0f172a")
 title = tk.Label(root, text="EVO", font=("Arial", 24, "bold"),
                  fg="#38bdf8", bg="#0f172a")
 title.pack(pady=10)
+# 🤖 AVATAR FACE
+avatar_canvas = tk.Canvas(root, width=100, height=100, bg="#0f172a", highlightthickness=0)
+avatar_canvas.pack()
+
+# Face
+avatar_canvas.create_oval(10, 10, 90, 90, fill="#1e293b")
+
+# Eyes
+left_eye = avatar_canvas.create_oval(30, 35, 40, 45, fill="#38bdf8")
+right_eye = avatar_canvas.create_oval(60, 35, 70, 45, fill="#38bdf8")
+
+# Mouth
+mouth = avatar_canvas.create_arc(30, 50, 70, 80,
+                                 start=200, extent=140,
+                                 style="arc", outline="#38bdf8", width=2)
+
 
 status_label = tk.Label(root, text="Ready",
                         fg="white", bg="#0f172a")
@@ -234,5 +257,146 @@ def start():
     speak("Access granted. How can I help you today?")
 
 root.after(1000, start)
+# ================== 💬 ADVANCED CHAT UI ==================
 
+chat_container = tk.Frame(root, bg="#0f172a")
+chat_container.config(height=180)
+chat_container.pack(pady=10)
+
+# 📜 Scrollable area
+canvas = tk.Canvas(chat_container, bg="#0f172a", highlightthickness=0)
+canvas.config(width=400, height=150)
+# scrollbar = tk.Scrollbar(chat_container, orient="vertical", command=canvas.yview)
+chat_frame = tk.Frame(canvas, bg="#0f172a")
+
+chat_frame.bind(
+    "<Configure>",
+    lambda e: canvas.configure(scrollregion=canvas.bbox("all"))
+)
+
+canvas.create_window((0, 0), window=chat_frame, anchor="nw")
+canvas.configure()
+
+canvas.pack()
+# scrollbar.pack(side="right", fill="y")
+
+# 💬 Chat bubbles
+def add_message(text, sender="user"):
+    bubble = tk.Label(
+        chat_frame,
+        text=text,
+        wraplength=300,
+        justify="left",
+        font=("Arial", 11),
+        padx=10,
+        pady=6,
+        bd=0
+    )
+
+    if sender == "user":
+        bubble.config(bg="#22c55e", fg="black")
+        bubble.pack(anchor="e", pady=4, padx=10)
+    else:
+        bubble.config(bg="#1e293b", fg="white")
+        bubble.pack(anchor="w", pady=4, padx=10)
+
+    canvas.update_idletasks()
+    canvas.yview_moveto(1)
+
+# 🤖 Typing animation
+def show_typing():
+    typing_label = tk.Label(
+        chat_frame,
+        text="Evo is typing...",
+        font=("Arial", 10, "italic"),
+        fg="#94a3b8",
+        bg="#0f172a"
+    )
+    typing_label.pack(anchor="w", padx=10)
+    canvas.update_idletasks()
+    canvas.yview_moveto(1)
+    return typing_label
+
+# 💬 INPUT AREA
+input_frame = tk.Frame(root, bg="#0f172a")
+input_frame.pack(pady=5)
+
+chat_entry = tk.Entry(
+    input_frame,
+    font=("Arial", 13),
+    width=28,
+    bg="#1e293b",
+    fg="white",
+    insertbackground="white",
+    bd=0
+)
+chat_entry.grid(row=0, column=0, padx=8, ipady=6)
+
+send_btn = tk.Button(
+    input_frame,
+    text="➤",
+    font=("Arial", 12, "bold"),
+    bg="#22c55e",
+    fg="black",
+    bd=0,
+    padx=12,
+    command=lambda: send_chat()
+)
+send_btn.grid(row=0, column=1)
+
+chat_entry.config(highlightthickness=1, highlightbackground="#38bdf8")
+
+# 💬 SEND FUNCTION (ENHANCED)
+def send_chat():
+    command = chat_entry.get()
+
+    if not command:
+        return
+
+    chat_entry.delete(0, tk.END)
+
+    add_message(command, "user")
+    user_label.config(text="You: " + command)
+
+    typing = show_typing()
+
+    def process_ai():
+        response = ""
+
+        # reuse your process logic
+        if any(x in command.lower() for x in ["time","youtube","google","chrome","firefox","file","calculator","terminal","vs code","volume","mute","shutdown","restart","lock","exit"]):
+            process(command.lower())
+            typing.destroy()
+            return
+        else:
+            response = ask_ai(command)
+
+        typing.destroy()
+        add_message(response, "ai")
+        speak(response)
+
+    threading.Thread(target=process_ai).start()
+
+# ⌨️ ENTER KEY SUPPORT
+chat_entry.bind("<Return>", lambda event: send_chat())
+# 🤖 FACE ANIMATION
+def animate_face():
+    while True:
+        # blink
+        avatar_canvas.itemconfig(left_eye, fill="#0f172a")
+        avatar_canvas.itemconfig(right_eye, fill="#0f172a")
+        root.update()
+        root.after(150)
+
+        avatar_canvas.itemconfig(left_eye, fill="#38bdf8")
+        avatar_canvas.itemconfig(right_eye, fill="#38bdf8")
+        root.update()
+
+        root.after(3000)
+
+threading.Thread(target=animate_face, daemon=True).start()
 root.mainloop()
+
+
+
+
