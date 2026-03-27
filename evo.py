@@ -2,14 +2,15 @@ import speech_recognition as sr
 import os
 import datetime
 import webbrowser
-import openai
 import tkinter as tk
 import cv2
 import face_recognition
 import threading
+import http.client
+import json
 
-# 🔑 API KEY
-openai.api_key = "YOUR_API"
+# 🔑 RAPID API KEY
+API_KEY = "YOUR_API"
 
 # 🔊 SPEAK
 def speak(text):
@@ -18,7 +19,7 @@ def speak(text):
         output_label.config(text="Evo: " + text)
         root.update()
 
-# 🎤 LISTEN WITH ANIMATION
+# 🎤 LISTEN
 def listen():
     r = sr.Recognizer()
 
@@ -45,18 +46,41 @@ def listen():
     except:
         return ""
 
-# 🧠 AI BRAIN (same as yours)
+# 🧠 AI USING RAPID API
 def ask_ai(question):
     try:
-        response = openai.ChatCompletion.create(
-            model="gpt-4o-mini",
-            messages=[{"role": "user", "content": question}]
-        )
-        return response['choices'][0]['message']['content']
-    except:
-        return "Sorry, AI not working"
+        conn = http.client.HTTPSConnection("chatgpt-42.p.rapidapi.com")
 
-# 📷 FACE SCAN (LOCK SYSTEM)
+        payload = json.dumps({
+            "messages": [{"role": "user", "content": question}],
+            "system_prompt": "",
+            "temperature": 0.9,
+            "top_k": 5,
+            "top_p": 0.9,
+            "max_tokens": 256,
+            "web_access": False
+        })
+
+        headers = {
+            'x-rapidapi-key': "YOUR_KEY",
+            'x-rapidapi-host': "chatgpt-42.p.rapidapi.com",
+            'Content-Type': "application/json"
+        }
+
+        conn.request("POST", "/conversationgpt4-2", payload, headers)
+        res = conn.getresponse()
+        data = res.read()
+
+        response = json.loads(data.decode("utf-8"))
+
+        # Extract reply safely
+        return response.get("result", "Sorry, I didn't understand.")
+
+    except Exception as e:
+        print(e)
+        return "AI error. Please check internet."
+
+# 📷 FACE UNLOCK
 def face_unlock():
     cam = cv2.VideoCapture(0)
 
@@ -91,7 +115,7 @@ def face_unlock():
     cv2.destroyAllWindows()
     return False
 
-# 🚀 COMMANDS (UNCHANGED)
+# 🚀 COMMANDS
 def process(command):
 
     if "time" in command:
@@ -168,14 +192,14 @@ def start_listening():
     process(command)
     mic_btn.config(bg="#38bdf8")
 
-# ================== 🔐 FACE FIRST ==================
+# 🔐 FACE CHECK
 speak("Hello Asmit. I am Evo. Scanning your face.")
 
 if not face_unlock():
     speak("Face not recognized. Access denied.")
     exit()
 
-# ================== 🖥️ UI ==================
+# 🖥️ UI
 root = tk.Tk()
 root.title("EVO AI")
 root.geometry("500x400")
@@ -206,11 +230,9 @@ mic_btn = tk.Button(root, text="🎤",
                     padx=20, pady=10)
 mic_btn.pack(pady=30)
 
-# 🔥 FINAL GREETING AFTER UNLOCK
 def start():
     speak("Access granted. How can I help you today?")
 
 root.after(1000, start)
 
 root.mainloop()
-
