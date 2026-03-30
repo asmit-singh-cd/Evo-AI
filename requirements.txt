@@ -1,0 +1,4 @@
+speechrecognition
+opencv-python
+face-recognition
+pyaudio
