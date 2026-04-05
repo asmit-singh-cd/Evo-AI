@@ -7,15 +7,20 @@ import cv2
 import face_recognition
 import threading
 import http.client
+import requests
 import json
+import pywhatkit
+import time
 
-# 🔑 RAPID API KEY
-API_KEY = "YOUR_API"
+WHATSAPP_MODE = False
+# 🔑 CONFIGURATION
+GEMINI_API_KEY = "YOUR_API"
+
 
 # 🔊 SPEAK
 def speak(text):
-    os.system(f'espeak-ng -s 140 -p 20 -v en-us "{text}" 2>/dev/null')
-
+    # os.system(f'espeak-ng -s 140 -p 20 -v en-us "{text}" 2>/dev/null')  -v hi+m2
+    os.system(f'espeak-ng -s 140 -p 20 -v hi+m2 "{text}" 2>/dev/null')
     if "output_label" in globals():
         output_label.config(text="Evo: " + text)
         root.update()
@@ -53,39 +58,23 @@ def listen():
     except:
         return ""
 
-# 🧠 AI USING RAPID API
 def ask_ai(question):
+    # Updated to 2.5 Flash for 2026 compatibility
+    url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
+    headers = {'Content-Type': 'application/json'}
+    data = {"contents": [{"parts": [{"text": f"Keep it brief: {question}"}]}]}
+
     try:
-        conn = http.client.HTTPSConnection("chatgpt-42.p.rapidapi.com")
-
-        payload = json.dumps({
-            "messages": [{"role": "user", "content": question}],
-            "system_prompt": "",
-            "temperature": 0.9,
-            "top_k": 5,
-            "top_p": 0.9,
-            "max_tokens": 256,
-            "web_access": False
-        })
-
-        headers = {
-            'x-rapidapi-key': "27eccd1036msh576d4fbb4844a7dp1e3253jsn9e625b267b35",
-            'x-rapidapi-host': "chatgpt-42.p.rapidapi.com",
-            'Content-Type': "application/json"
-        }
-
-        conn.request("POST", "/conversationgpt4-2", payload, headers)
-        res = conn.getresponse()
-        data = res.read()
-
-        response = json.loads(data.decode("utf-8"))
-
-        # Extract reply safely
-        return response.get("result", "Sorry, I didn't understand.")
-
+        # Added verify=False to bypass SSL errors
+        response = requests.post(url, headers=headers, json=data, timeout=10, verify=False)
+        
+        if response.status_code == 200:
+            return response.json()['candidates'][0]['content']['parts'][0]['text']
+        else:
+            return f"Server Error {response.status_code}. Check API Key."
     except Exception as e:
-        print(e)
-        return "AI error. Please check internet."
+        return f"Network Error: {e}"
+
 
 # 📷 FACE UNLOCK
 def face_unlock():
@@ -122,13 +111,174 @@ def face_unlock():
     cv2.destroyAllWindows()
     return False
 
+# 📱 CONTACTS (ADD YOUR NUMBERS HERE)
+contacts = {
+    "person1": "+91XXXXXXXXXX",
+    "person2": "+91XXXXXXXXXX"
+}
+
+# ⏰ EXTRACT DELAY
+def get_delay(command):
+    words = command.split()
+
+    for i, word in enumerate(words):
+        if word.isdigit():
+            num = int(word)
+
+            if "minute" in command:
+                return datetime.timedelta(minutes=num)
+            elif "hour" in command:
+                return datetime.timedelta(hours=num)
+
+    return datetime.timedelta(minutes=1)  # default
+def extract_message(command):
+    try:
+        parts = command.split("to")[1].strip()
+        words = parts.split()
+
+        name = words[0]
+
+        # message = everything after name until "after"
+        if "after" in words:
+            after_index = words.index("after")
+            msg_words = words[1:after_index]
+        else:
+            msg_words = words[1:]
+
+        message = " ".join(msg_words)
+
+        return name, message
+    except:
+        return None, None
+# 💬 SEND WHATSAPP MESSAGE
+def handle_whatsapp(command):
+    global WHATSAPP_MODE
+    WHATSAPP_MODE = True   # 🔒 lock AI
+
+    try:
+        command = command.lower()
+
+        # 🧠 Extract name + message
+        def extract_message(cmd):
+            try:
+                parts = cmd.split("to")[1].strip()
+                words = parts.split()
+
+                name = words[0]
+
+                # message = words after name until "after"
+                if "after" in words:
+                    after_index = words.index("after")
+                    msg_words = words[1:after_index]
+                else:
+                    msg_words = words[1:]
+
+                message = " ".join(msg_words)
+                return name, message
+            except:
+                return None, None
+
+        name, message = extract_message(command)
+
+        if not name:
+            speak("Kisko bhejna hai?")
+            WHATSAPP_MODE = False
+            return True
+
+        number = contacts.get(name)
+
+        if not number:
+            speak("Contact not found")
+            WHATSAPP_MODE = False
+            return True
+
+        # 💬 If message NOT in command → ask user
+        if not message:
+            speak("Message bolo ya type karo")
+
+            # try chat input first
+            message = chat_entry.get().strip()
+            chat_entry.delete(0, tk.END)
+
+            # fallback to voice
+            if not message:
+                for _ in range(3):
+                    message = listen()
+                    if message:
+                        break
+                    speak("Dobara bolo")
+
+        if not message:
+            speak("Message nahi mila, cancel kar raha hoon")
+            WHATSAPP_MODE = False
+            return True
+
+        # ⏰ Extract delay
+        def get_delay(cmd):
+            words = cmd.split()
+            for i, word in enumerate(words):
+                if word.isdigit():
+                    num = int(word)
+                    if "minute" in cmd:
+                        return datetime.timedelta(minutes=num)
+                    elif "hour" in cmd:
+                        return datetime.timedelta(hours=num)
+            return datetime.timedelta(minutes=1)
+
+        delay = get_delay(command)
+
+        send_time = datetime.datetime.now() + delay
+        hour = send_time.hour
+        minute = send_time.minute+1
+
+        speak(f"{name} ko message {hour}:{minute} par bhej raha hoon")
+
+        # 🚀 SEND MESSAGE
+        pywhatkit.sendwhatmsg(number, message, hour, minute, wait_time=20,tab_close=True,close_time=3)
+
+    except Exception as e:
+        print("WhatsApp Error:", e)
+        speak("Message bhejne mein error aaya")
+
+    WHATSAPP_MODE = False   # 🔓 unlock AI
+    return True
+
 # 🚀 COMMANDS
 def process(command):
+    global WHATSAPP_MODE
+
+    if WHATSAPP_MODE:
+        return True
+    command=command.lower()
 
     if "time" in command:
         t = datetime.datetime.now().strftime("%H:%M")
         speak(f"Abhi time hai {t}")
 
+    elif "send message" in command or "whatsapp" in command:
+        return handle_whatsapp(command)   # 🔥 RETURN 
+
+    elif "play" in command:
+        command = command.lower()
+
+        # Extract song name cleanly
+        song = command.replace("play", "").strip()
+
+        # fallback (if somehow empty, still don't ask)
+        if song == "":
+            song = command.strip()
+
+        speak("Playing " + song)
+
+        def play_async():
+            try:
+                time.sleep(1.5)  # let speech finish
+                pywhatkit.playonyt(song)
+            except Exception as e:
+                print("Error:", e)
+                webbrowser.open(f"https://www.youtube.com/results?search_query={song}")
+
+        threading.Thread(target=play_async, daemon=True).start()
     elif "youtube" in command:
         webbrowser.open("https://youtube.com")
         speak("YouTube khol raha hoon")
@@ -364,12 +514,20 @@ def send_chat():
         response = ""
 
         # reuse your process logic
-        if any(x in command.lower() for x in ["time","youtube","google","chrome","firefox","file","calculator","terminal","vs code","volume","mute","shutdown","restart","lock","exit"]):
-            process(command.lower())
+        if any(x in command.lower() for x in [
+        "time","play","youtube","google","chrome","firefox",
+        "file","calculator","terminal","vs code",
+        "volume","mute","shutdown","restart","lock","exit",
+        "send message","whatsapp"
+    ]):
+            handled = process(command.lower())
             typing.destroy()
             return
         else:
-            response = ask_ai(command)
+            if not WHATSAPP_MODE:
+                response = ask_ai(command)
+            else:
+                return
 
         typing.destroy()
         add_message(response, "ai")
